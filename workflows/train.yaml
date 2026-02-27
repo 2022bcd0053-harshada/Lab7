@@ -1,0 +1,97 @@
+name: Train and Deploy ML Model
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+
+  train:
+    name: Train Model
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install jupyter nbconvert ipykernel joblib scikit-learn pandas numpy
+
+      - name: Run training notebook
+        run: |
+          jupyter nbconvert --to notebook --execute mlops_lab1.ipynb --ExecutePreprocessor.kernel_name=python
+
+      - name: Upload trained model
+        uses: actions/upload-artifact@v4
+        with:
+          name: trained-model
+          path: outputs/model/
+
+      - name: Upload metrics
+        uses: actions/upload-artifact@v4
+        with:
+          name: evaluation-results
+          path: outputs/results/
+
+      - name: Set metrics output
+        id: metrics
+        run: |
+          R2=$(python -c "import json; print(json.load(open('outputs/results/metrics.json'))['r2'])")
+          echo "r2=$R2" >> $GITHUB_OUTPUT
+
+  deploy:
+    name: Deploy if Model Improved
+    needs: train
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Download model artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: trained-model
+          path: outputs/model/
+
+      - name: Download metrics artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: evaluation-results
+          path: outputs/results/
+
+      - name: Read metrics and compare
+        id: compare
+        run: |
+          CURRENT_R2=$(python -c "import json; print(json.load(open('outputs/results/metrics.json'))['r2'])")
+          echo "Current R2: $CURRENT_R2"
+          echo "Best R2: ${{ vars.BEST_R2 }}"
+
+          # Proper floating-point comparison
+          deploy=$(echo "$CURRENT_R2 > ${{ vars.BEST_R2 }}" | bc -l)
+          if [ "$deploy" -eq 1 ]; then
+            echo "New model improved. Deploying..."
+            echo "DEPLOY=true" >> $GITHUB_ENV
+          else
+            echo "Metric did not improve. Skipping deployment."
+            exit 0
+          fi
+
+      - name: Login to Docker Hub
+        if: env.DEPLOY == 'true'
+        run: echo "${{ secrets.DOCKER_TOKEN }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+
+      - name: Build and push Docker image
+        if: env.DEPLOY == 'true'
+        run: |
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/wine_predict_2022bcd0053:latest .
+          docker push ${{ secrets.DOCKER_USERNAME }}/wine_predict_2022bcd0053:latest
