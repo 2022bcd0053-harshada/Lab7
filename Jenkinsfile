@@ -5,17 +5,9 @@ pipeline {
         IMAGE_NAME = "2022bcd0053harshada/mlops-lab6:latest"
         CONTAINER_NAME = "ml-test-container"
         PORT = "8000"
-        GIT_REPO = "https://github.com/your-username/your-repo.git"
-        GIT_BRANCH = "main"
     }
 
     stages {
-
-        stage('Clone Repo') {
-            steps {
-                git branch: "${GIT_BRANCH}", url: "${GIT_REPO}"
-            }
-        }
 
         stage('Pull Image') {
             steps {
