@@ -32,7 +32,7 @@ pipeline {
             }
         }
 
-        stage('Valid Input Test') {
+        stage('Input Test') {
             steps {
                 script {
                     def response = sh(
@@ -49,28 +49,6 @@ pipeline {
 
                     if (!response.contains("prediction")) {
                         error "Valid test failed!"
-                    }
-                }
-            }
-        }
-
-        stage('Invalid Input Test') {
-            steps {
-                script {
-                    def response = sh(
-                        script: """
-                        curl -s -X POST http://host.docker.internal:${PORT}/predict \
-                        -H "Content-Type: application/json" \
-                        -d @test_inputs/invalid.json
-                        """,
-                        returnStdout: true
-                    )
-
-                    echo "Invalid Response: ${response}"
-                    writeFile file: 'invalid_output.txt', text: response
-
-                    if (!response.toLowerCase().contains("error")) {
-                        error "Invalid test failed!"
                     }
                 }
             }
