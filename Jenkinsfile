@@ -5,6 +5,8 @@ pipeline {
         IMAGE_NAME = "2022bcd0053harshada/mlops-lab6:latest"
         CONTAINER_NAME = "ml-test-container"
         PORT = "8000"
+        REPO_URL = "github.com/2022bcd0053-harshada/Lab7.git"
+        BRANCH = "main"
     }
 
     stages {
@@ -16,13 +18,13 @@ pipeline {
         }
 
         stage('Run Container') {
-    steps {
-        sh """
-        docker rm -f ${CONTAINER_NAME} || true
-        docker run -d -p ${PORT}:8000 --name ${CONTAINER_NAME} ${IMAGE_NAME}
-        """
-    }
-}
+            steps {
+                sh """
+                docker rm -f ${CONTAINER_NAME} || true
+                docker run -d -p ${PORT}:8000 --name ${CONTAINER_NAME} ${IMAGE_NAME}
+                """
+            }
+        }
 
         stage('Wait for API') {
             steps {
@@ -35,7 +37,7 @@ pipeline {
                 script {
                     def response = sh(
                         script: """
-                        curl -s -X POST http://localhost:${PORT}/predict \
+                        curl -s -X POST http://host.docker.internal:${PORT}/predict \
                         -H "Content-Type: application/json" \
                         -d @test_inputs/valid.json
                         """,
@@ -43,7 +45,6 @@ pipeline {
                     )
 
                     echo "Valid Response: ${response}"
-
                     writeFile file: 'valid_output.txt', text: response
 
                     if (!response.contains("prediction")) {
@@ -58,7 +59,7 @@ pipeline {
                 script {
                     def response = sh(
                         script: """
-                        curl -s -X POST http://localhost:${PORT}/predict \
+                        curl -s -X POST http://host.docker.internal:${PORT}/predict \
                         -H "Content-Type: application/json" \
                         -d @test_inputs/invalid.json
                         """,
@@ -66,7 +67,6 @@ pipeline {
                     )
 
                     echo "Invalid Response: ${response}"
-
                     writeFile file: 'invalid_output.txt', text: response
 
                     if (!response.toLowerCase().contains("error")) {
@@ -88,9 +88,9 @@ pipeline {
                     git config user.name "Jenkins"
 
                     git add valid_output.txt invalid_output.txt
-                    git commit -m "Add test results from Jenkins" || echo "No changes to commit"
+                    git commit -m "Add test results from Jenkins" || echo "No changes"
 
-                    git push https://${GIT_USER}:${GIT_PASS}@github.com/your-username/your-repo.git ${GIT_BRANCH}
+                    git push https://${GIT_USER}:${GIT_PASS}@${REPO_URL} HEAD:${BRANCH}
                     """
                 }
             }
@@ -99,8 +99,8 @@ pipeline {
         stage('Stop Container') {
             steps {
                 sh """
-                docker stop ${CONTAINER_NAME}
-                docker rm ${CONTAINER_NAME}
+                docker stop ${CONTAINER_NAME} || true
+                docker rm ${CONTAINER_NAME} || true
                 """
             }
         }
